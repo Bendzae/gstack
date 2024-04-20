@@ -1,0 +1,17 @@
+[package]
+name = "g-stack"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+anyhow = "1.0.82"
+clap = { version = "4.5.4", features = ["derive"] }
+cliclack = "0.2.5"
+console = "0.15.8"
+ctrlc = "3.4.4"
+octocrab = "0.38.0"
+ron = "0.8.1"
+rustygit = "0.5.0"
+serde = { version = "1.0.197", features = ["derive"] }
