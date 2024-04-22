@@ -9,13 +9,13 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Default, Debug)]
 pub struct GitStack {
-    prefix: Option<String>,
-    branches: Vec<String>,
+    pub prefix: Option<String>,
+    pub branches: Vec<String>,
 }
 
 #[derive(Serialize, Deserialize, Default, Debug)]
 pub struct GsState {
-    stacks: Vec<GitStack>,
+    pub stacks: Vec<GitStack>,
 }
 
 impl GsState {
