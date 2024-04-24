@@ -31,23 +31,7 @@ fn main() -> Result<()> {
     };
 
     match &cli.command {
-        Some(Commands::Create { prefix, name }) => {
-            let prefix_val = prefix.clone().unwrap_or("".to_string());
-            let name_val = name.clone().unwrap_or("some-branch".to_string());
-            let current_branch = ctx.repo.get_hash(false)?;
-            let name = BranchName::from_str(
-                format!("{}-{}", prefix_val.as_str(), name_val.as_str()).as_str(),
-            )?;
-            ctx.repo
-                .create_branch_from_startpoint(&name, current_branch.as_str())?;
-            ctx.repo.switch_branch(&name)?;
-            ctx.state.stacks.push(GitStack {
-                prefix: prefix.clone(),
-                branches: vec![name.to_string()],
-            });
-
-            println!("Created new stack with base branch: {}", name)
-        }
+        Some(Commands::New { prefix, name }) => ctx.new_stack(prefix, name)?,
         Some(Commands::Add { name }) => {}
         Some(Commands::List {}) => {}
         None => {}
@@ -56,4 +40,29 @@ fn main() -> Result<()> {
     println!("Local branches: {:?}", ctx.repo.list_branches()?);
 
     Ok(())
+}
+
+impl GsContext {
+    pub fn new_stack(&mut self, prefix: &Option<String>, name: &Option<String>) -> Result<()> {
+        let current_branch = self.repo.get_hash(false)?;
+        let name = GsContext::get_branch_name(prefix, name)?;
+        self.repo
+            .create_branch_from_startpoint(&name, current_branch.as_str())?;
+        self.repo.switch_branch(&name)?;
+        self.state.stacks.push(GitStack {
+            prefix: prefix.clone(),
+            branches: vec![name.to_string()],
+        });
+
+        println!("Created new stack with base branch: {}", name);
+        Ok(())
+    }
+
+    fn get_branch_name(prefix: &Option<String>, name: &Option<String>) -> Result<BranchName> {
+        let prefix_val = prefix.clone().unwrap_or("".to_string());
+        let name_val = name.clone().unwrap_or("some-branch".to_string());
+        Ok(BranchName::from_str(
+            format!("{}-{}", prefix_val.as_str(), name_val.as_str()).as_str(),
+        )?)
+    }
 }
