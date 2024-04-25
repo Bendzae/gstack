@@ -31,4 +31,8 @@ pub enum Commands {
         name: Option<String>,
     },
     List {},
+    Base {},
+    Up {},
+    Down {},
+    Reset {},
 }
