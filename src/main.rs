@@ -1,8 +1,8 @@
-use std::{error::Error, path::PathBuf, str::FromStr};
+use std::{path::PathBuf, str::FromStr};
 
-use clap::{command, Parser, Subcommand};
+use clap::Parser;
+use console::style;
 use rustygit::types::BranchName;
-use serde::{Deserialize, Serialize};
 
 use crate::{
     command::{Cli, Commands},
@@ -34,10 +34,11 @@ fn main() -> Result<()> {
 
     match &cli.command {
         Some(Commands::New { prefix, name }) => ctx.new_stack(prefix, name)?,
-        Some(Commands::Add { name }) => {}
-        Some(Commands::List {}) => ctx.list(),
-        Some(Commands::Up {}) => todo!(),
-        Some(Commands::Down {}) => todo!(),
+        Some(Commands::Add { name }) => ctx.add_to_stack(name)?,
+        Some(Commands::List {}) => ctx.list()?,
+        Some(Commands::Change {}) => ctx.change()?,
+        Some(Commands::Up {}) => ctx.checkout_above()?,
+        Some(Commands::Down {}) => ctx.checkout_below()?,
         Some(Commands::Base {}) => ctx.checkout_base()?,
         Some(Commands::Reset {}) => ctx.reset()?,
         None => {}
@@ -64,6 +65,23 @@ impl GsContext {
         Ok(())
     }
 
+    fn add_to_stack(&mut self, name: &Option<String>) -> Result<()> {
+        let current_branch = self.repo.current_branch()?;
+        let prefix = &self.current_stack().unwrap().prefix;
+        let name = GsContext::get_branch_name(prefix, name)?;
+        self.current_stack_mut()
+            .unwrap()
+            .branches
+            .push(name.to_string());
+        self.repo
+            .create_branch_from_startpoint(&name, current_branch.to_string().as_str())?;
+        self.repo.switch_branch(&name)?;
+        self.state.write(self.base_path.clone())?;
+
+        println!("Stacked a new branch with name: {}", name);
+        Ok(())
+    }
+
     fn get_branch_name(prefix: &Option<String>, name: &Option<String>) -> Result<BranchName> {
         let prefix_val = prefix.clone().unwrap_or("".to_string());
         let name_val = name.clone().unwrap_or("some-branch".to_string());
@@ -83,20 +101,107 @@ impl GsContext {
         None
     }
 
-    fn list(&self) {
-        if let Some(stack) = self.current_stack() {
-            println!("{:?}", stack)
-        } else {
-            for (i, stack) in self.state.stacks.iter().enumerate() {
-                println!("{:?}: {:?} Base: {:?}", i, stack.prefix, stack.base_branch);
+    fn current_stack_mut(&mut self) -> Option<&mut GitStack> {
+        if let Ok(current_branch) = self.repo.current_branch() {
+            return self
+                .state
+                .stacks
+                .iter_mut()
+                .find(|stack| stack.branches.contains(&current_branch.to_string()));
+        };
+        None
+    }
+
+    fn current_stack_position(&self) -> Option<(&GitStack, usize)> {
+        if let Ok(current_branch) = &self.repo.current_branch() {
+            for stack in &self.state.stacks {
+                let branch_idx = stack
+                    .branches
+                    .iter()
+                    .position(|branch| branch == &current_branch.to_string());
+                if let Some(idx) = branch_idx {
+                    return Some((&stack, idx));
+                }
             }
+        };
+        None
+    }
+
+    fn list(&self) -> Result<()> {
+        if let Some(stack) = self.current_stack() {
+            println!("{:?}", stack);
+        } else {
+            println!("{:?}", self.state.stacks);
         }
+        Ok(())
+    }
+
+    fn change(&self) -> Result<()> {
+        ctrlc::set_handler(move || {}).expect("setting Ctrl-C handler");
+        if let Some(stack) = self.current_stack() {
+        } else {
+            // cliclack::intro(style(" stacks ").on_cyan().black())?;
+
+            let stacks: Vec<(String, String, String)> = self
+                .state
+                .stacks
+                .iter()
+                .enumerate()
+                .map(|(i, stack)| {
+                    (
+                        i.to_string(),
+                        format!("({}): {}", i, stack.prefix.clone().unwrap()),
+                        "".to_string(),
+                    )
+                })
+                .collect();
+            let options: Vec<(&str, &str, &str)> = stacks
+                .iter()
+                .map(|(a, b, c)| (a.as_str(), b.as_str(), c.as_str()))
+                .collect();
+
+            let selected = cliclack::select("Stacks")
+                .initial_value("0")
+                .items(&options)
+                .interact()?;
+
+            let stack = self.state.stacks.get(selected.parse::<usize>()?).unwrap();
+            let branch = stack.branches.first().unwrap();
+
+            self.repo.switch_branch(&BranchName::from_str(branch)?)?;
+
+            cliclack::outro(format!(
+                "{}\n",
+                style(format!("Moved to stack {}", selected))
+                    .cyan()
+                    .bright()
+            ))?;
+        }
+        Ok(())
     }
 
     fn checkout_base(&self) -> Result<()> {
-        if let Some(base) = self.current_stack() {
+        if let Some(stack) = self.current_stack() {
             self.repo
-                .switch_branch(&BranchName::from_str(base.base_branch.as_str())?)?;
+                .switch_branch(&BranchName::from_str(stack.base_branch.as_str())?)?;
+        }
+        Ok(())
+    }
+
+    fn checkout_above(&self) -> Result<()> {
+        if let Some((stack, idx)) = self.current_stack_position() {
+            if let Some(branch) = stack.branches.get(idx + 1) {
+                self.repo.switch_branch(&BranchName::from_str(branch)?)?;
+            }
+        }
+        Ok(())
+    }
+
+    fn checkout_below(&self) -> Result<()> {
+        if let Some((stack, idx)) = self.current_stack_position() {
+            if let Some(branch) = stack.branches.get(idx - 1) {
+                self.repo.switch_branch(&BranchName::from_str(branch)?)?;
+            }
         }
         Ok(())
     }

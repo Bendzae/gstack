@@ -30,7 +30,11 @@ pub enum Commands {
         #[arg(short, long)]
         name: Option<String>,
     },
+    /// List all stacks(not in stack branch) or branches(in stack branch)
+    #[clap(alias = "ls")]
     List {},
+    #[clap(alias = "c")]
+    Change {},
     Base {},
     Up {},
     Down {},
