@@ -2,7 +2,7 @@ use std::{path::PathBuf, str::FromStr};
 
 use clap::Parser;
 use console::style;
-use dialoguer::{theme::ColorfulTheme, Select};
+use dialoguer::{theme::ColorfulTheme, Input, Select};
 use rustygit::types::BranchName;
 
 use crate::{
@@ -49,31 +49,61 @@ fn main() -> Result<()> {
 }
 
 impl GsContext {
-    pub fn new_stack(&mut self, prefix: &Option<String>, name: &Option<String>) -> Result<()> {
+    fn new_stack(&mut self, prefix: &Option<String>, name: &Option<String>) -> Result<()> {
+        let prefix_val = match prefix {
+            Some(value) => value.to_string(),
+            None => {
+                let input: String = Input::with_theme(&ColorfulTheme::default())
+                    .with_prompt("Stack Prefix:")
+                    .interact_text()
+                    .unwrap();
+                input
+            }
+        };
+        let name_val = match name {
+            Some(value) => value.to_string(),
+            None => {
+                let input: String = Input::with_theme(&ColorfulTheme::default())
+                    .with_prompt("Bottom Branch Name:")
+                    .interact_text()
+                    .unwrap();
+                input
+            }
+        };
         let current_branch = self.repo.current_branch()?;
-        let name = GsContext::get_branch_name(prefix, name)?;
+        let branch_name = GsContext::get_branch_name(&prefix_val, &name_val)?;
         self.repo
-            .create_branch_from_startpoint(&name, current_branch.to_string().as_str())?;
-        self.repo.switch_branch(&name)?;
+            .create_branch_from_startpoint(&branch_name, current_branch.to_string().as_str())?;
+        self.repo.switch_branch(&branch_name)?;
         self.state.stacks.push(GitStack {
             base_branch: current_branch.to_string(),
-            prefix: prefix.clone(),
-            branches: vec![name.to_string()],
+            prefix: Some(prefix_val.clone()),
+            branches: vec![branch_name.to_string()],
         });
         self.state.write(self.base_path.clone())?;
 
-        println!("Created new stack with base branch: {}", name);
+        println!("Created new stack with base branch: {}", branch_name);
         Ok(())
     }
 
     fn add_to_stack(&mut self, name: &Option<String>) -> Result<()> {
-        let current_branch = self.repo.current_branch()?;
-        let prefix = &self.current_stack().unwrap().prefix;
-        let name = GsContext::get_branch_name(prefix, name)?;
+        let name_val = match name {
+            Some(value) => value.to_string(),
+            None => {
+                let input: String = Input::with_theme(&ColorfulTheme::default())
+                    .with_prompt("Branch Name:")
+                    .interact_text()
+                    .unwrap();
+                input
+            }
+        };
+        let prefix = self.current_stack().unwrap().prefix.clone().unwrap();
+        let name = GsContext::get_branch_name(&prefix, &name_val)?;
         self.current_stack_mut()
             .unwrap()
             .branches
             .push(name.to_string());
+        let current_branch = self.repo.current_branch()?;
         self.repo
             .create_branch_from_startpoint(&name, current_branch.to_string().as_str())?;
         self.repo.switch_branch(&name)?;
@@ -83,11 +113,9 @@ impl GsContext {
         Ok(())
     }
 
-    fn get_branch_name(prefix: &Option<String>, name: &Option<String>) -> Result<BranchName> {
-        let prefix_val = prefix.clone().unwrap_or("".to_string());
-        let name_val = name.clone().unwrap_or("some-branch".to_string());
+    fn get_branch_name(prefix: &String, name: &String) -> Result<BranchName> {
         Ok(BranchName::from_str(
-            format!("{}-{}", prefix_val.as_str(), name_val.as_str()).as_str(),
+            format!("{}/{}", prefix.as_str(), name.as_str()).as_str(),
         )?)
     }
 
@@ -139,10 +167,17 @@ impl GsContext {
 
     fn change(&self) -> Result<()> {
         if let Some(stack) = self.current_stack() {
+            let options: &Vec<String> = &stack
+                .branches
+                .iter()
+                .enumerate()
+                .map(|(i, branch)| format!("({}): {}", i, branch))
+                .collect();
+
             let branch_idx = Select::with_theme(&ColorfulTheme::default())
                 .with_prompt("Select Stack Branch")
                 .default(0)
-                .items(&stack.branches)
+                .items(options)
                 .interact()
                 .unwrap();
             let branch = &stack.branches.get(branch_idx).unwrap();
