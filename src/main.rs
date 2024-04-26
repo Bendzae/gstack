@@ -2,6 +2,7 @@ use std::{path::PathBuf, str::FromStr};
 
 use clap::Parser;
 use console::style;
+use dialoguer::{theme::ColorfulTheme, Select};
 use rustygit::types::BranchName;
 
 use crate::{
@@ -137,45 +138,36 @@ impl GsContext {
     }
 
     fn change(&self) -> Result<()> {
-        ctrlc::set_handler(move || {}).expect("setting Ctrl-C handler");
         if let Some(stack) = self.current_stack() {
+            let branch_idx = Select::with_theme(&ColorfulTheme::default())
+                .with_prompt("Select Stack Branch")
+                .default(0)
+                .items(&stack.branches)
+                .interact()
+                .unwrap();
+            let branch = &stack.branches.get(branch_idx).unwrap();
+            self.repo.switch_branch(&BranchName::from_str(branch)?)?;
         } else {
-            // cliclack::intro(style(" stacks ").on_cyan().black())?;
-
-            let stacks: Vec<(String, String, String)> = self
+            let stacks: Vec<String> = self
                 .state
                 .stacks
                 .iter()
                 .enumerate()
-                .map(|(i, stack)| {
-                    (
-                        i.to_string(),
-                        format!("({}): {}", i, stack.prefix.clone().unwrap()),
-                        "".to_string(),
-                    )
-                })
-                .collect();
-            let options: Vec<(&str, &str, &str)> = stacks
-                .iter()
-                .map(|(a, b, c)| (a.as_str(), b.as_str(), c.as_str()))
+                .map(|(i, stack)| format!("({}): {}", i, stack.prefix.clone().unwrap()))
                 .collect();
 
-            let selected = cliclack::select("Stacks")
-                .initial_value("0")
-                .items(&options)
-                .interact()?;
+            let stack_idx = Select::with_theme(&ColorfulTheme::default())
+                .with_prompt("Select Stack")
+                .default(0)
+                .items(&stacks)
+                .interact()
+                .unwrap();
 
-            let stack = self.state.stacks.get(selected.parse::<usize>()?).unwrap();
-            let branch = stack.branches.first().unwrap();
+            println!("Moving to {}!", stacks[stack_idx]);
+            let selected_stack = self.state.stacks.get(stack_idx).unwrap();
+            let branch = selected_stack.branches.first().unwrap();
 
             self.repo.switch_branch(&BranchName::from_str(branch)?)?;
-
-            cliclack::outro(format!(
-                "{}\n",
-                style(format!("Moved to stack {}", selected))
-                    .cyan()
-                    .bright()
-            ))?;
         }
         Ok(())
     }
