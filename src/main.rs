@@ -38,6 +38,7 @@ fn main() -> Result<()> {
         Some(Commands::Add { name }) => ctx.add_to_stack(name)?,
         Some(Commands::List {}) => ctx.list()?,
         Some(Commands::Change {}) => ctx.change()?,
+        Some(Commands::Sync {}) => ctx.sync()?,
         Some(Commands::Up {}) => ctx.checkout_above()?,
         Some(Commands::Down {}) => ctx.checkout_below()?,
         Some(Commands::Base {}) => ctx.checkout_base()?,
@@ -229,6 +230,21 @@ impl GsContext {
             if let Some(branch) = stack.branches.get(idx - 1) {
                 self.repo.switch_branch(&BranchName::from_str(branch)?)?;
             }
+        }
+        Ok(())
+    }
+
+    fn sync(&self) -> Result<()> {
+        let branches = &self.current_stack().unwrap().branches;
+        for (i, branch) in branches.clone().iter().enumerate() {
+            let rebase_on = match i {
+                0 => &self.current_stack().unwrap().base_branch,
+                _ => &branches[i - 1],
+            };
+            self.repo.rebase(
+                BranchName::from_str(branch)?,
+                BranchName::from_str(rebase_on)?,
+            )?;
         }
         Ok(())
     }

@@ -35,6 +35,8 @@ pub enum Commands {
     List {},
     #[clap(alias = "c")]
     Change {},
+    #[clap(alias = "ss")]
+    Sync {},
     Base {},
     Up {},
     Down {},
