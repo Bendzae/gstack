@@ -1,35 +1,45 @@
-use std::{path::PathBuf, str::FromStr};
+use std::{path::PathBuf, str::FromStr, sync::Arc};
 
 use clap::Parser;
-use console::style;
+use console::{pad_str, style};
 use dialoguer::{theme::ColorfulTheme, Input, Select};
+use octocrab::Octocrab;
 use rustygit::types::BranchName;
 
 use crate::{
     command::{Cli, Commands},
+    config::GlobalConfig,
     repo_extensions::RepoExtenstions,
     state::{GitStack, GsState},
 };
 use anyhow::Result;
 
 mod command;
+mod config;
 mod repo_extensions;
 mod state;
 
 struct GsContext {
     repo: rustygit::Repository,
     base_path: PathBuf,
+    github: Arc<Octocrab>,
     state: GsState,
 }
 
-fn main() -> Result<()> {
+#[tokio::main]
+async fn main() -> Result<()> {
     let cli = Cli::parse();
     let base_path = PathBuf::from_str(".")?;
     let repo = rustygit::Repository::new(base_path.clone());
+    let config = GlobalConfig::read()?;
+    let github = Octocrab::builder()
+        .personal_token(config.personal_access_token.unwrap())
+        .build()?;
     let state = GsState::init(base_path.clone())?;
     let mut ctx = GsContext {
         repo,
         base_path,
+        github: Arc::new(github),
         state,
     };
 
@@ -42,6 +52,7 @@ fn main() -> Result<()> {
         Some(Commands::Up {}) => ctx.checkout_above()?,
         Some(Commands::Down {}) => ctx.checkout_below()?,
         Some(Commands::Base {}) => ctx.checkout_base()?,
+        Some(Commands::Pr {}) => ctx.create_pull_requests().await?,
         Some(Commands::Reset {}) => ctx.reset()?,
         None => {}
     }
@@ -159,9 +170,38 @@ impl GsContext {
 
     fn list(&self) -> Result<()> {
         if let Some(stack) = self.current_stack() {
-            println!("{:?}", stack);
+            Self::list_stack_branches(stack)?;
         } else {
-            println!("{:?}", self.state.stacks);
+            Self::list_stacks(&self.state.stacks)?;
+        }
+        Ok(())
+    }
+
+    fn list_stack_branches(stack: &GitStack) -> Result<()> {
+        let width = 20;
+        for (i, branch) in stack.branches.iter().enumerate().rev() {
+            let str = format!("({}): {}", i, style(branch).cyan());
+            println!(
+                "{}",
+                pad_str(str.as_str(), width, console::Alignment::Center, None)
+            );
+            let str = format!("{}", style("\u{02193}").magenta());
+            println!(
+                "{}",
+                pad_str(str.as_str(), width, console::Alignment::Center, None)
+            );
+        }
+        let str = format!("{}", style(stack.base_branch.clone()).cyan());
+        println!(
+            "{}",
+            pad_str(str.as_str(), width, console::Alignment::Center, None)
+        );
+        Ok(())
+    }
+
+    fn list_stacks(stacks: &Vec<GitStack>) -> Result<()> {
+        for (i, stack) in stacks.iter().enumerate() {
+            println!("({}): {}", i, style(stack.prefix.clone().unwrap()).cyan());
         }
         Ok(())
     }
@@ -172,6 +212,7 @@ impl GsContext {
                 .branches
                 .iter()
                 .enumerate()
+                .rev()
                 .map(|(i, branch)| format!("({}): {}", i, branch))
                 .collect();
 
@@ -181,7 +222,7 @@ impl GsContext {
                 .items(options)
                 .interact()
                 .unwrap();
-            let branch = &stack.branches.get(branch_idx).unwrap();
+            let branch = &stack.branches.get(options.len() - branch_idx - 1).unwrap();
             self.repo.switch_branch(&BranchName::from_str(branch)?)?;
         } else {
             let stacks: Vec<String> = self
@@ -235,7 +276,9 @@ impl GsContext {
     }
 
     fn sync(&self) -> Result<()> {
+        let current_branch = self.repo.current_branch()?;
         let branches = &self.current_stack().unwrap().branches;
+        self.repo.pull_all(branches).ok();
         for (i, branch) in branches.clone().iter().enumerate() {
             let rebase_on = match i {
                 0 => &self.current_stack().unwrap().base_branch,
@@ -245,7 +288,28 @@ impl GsContext {
                 BranchName::from_str(branch)?,
                 BranchName::from_str(rebase_on)?,
             )?;
+            self.repo
+                .push_to_upstream("origin", &BranchName::from_str(branch)?)?;
         }
+        self.repo.switch_branch(&current_branch)?;
+        Ok(())
+    }
+
+    async fn create_pull_requests(&self) -> Result<()> {
+        let stack = &self.current_stack().unwrap();
+        let branches = &stack.branches;
+        let remote = self.repo.remote_repo_info()?;
+        let pulls = self.github.pulls(remote.owner, remote.name);
+        let open_pulls = pulls.list().send().await?;
+        println!(
+            "{:?}",
+            open_pulls
+                .items
+                .iter()
+                .map(|pr| pr.title.clone().unwrap())
+                .collect::<Vec<String>>()
+        );
+
         Ok(())
     }
 

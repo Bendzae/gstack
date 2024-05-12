@@ -40,5 +40,6 @@ pub enum Commands {
     Base {},
     Up {},
     Down {},
+    Pr {},
     Reset {},
 }
