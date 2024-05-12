@@ -35,7 +35,7 @@ impl RepoExtenstions for Repository {
     fn pull_all(&self, branches: &Vec<String>) -> Result<()> {
         for branch in branches {
             self.switch_branch(&BranchName::from_str(branch.as_str())?)?;
-            let output = self.cmd_out(&["pull"])?;
+            let output = self.cmd_out(&["pull", "--rebase"])?;
             println!("{:?}", output);
         }
         Ok(())

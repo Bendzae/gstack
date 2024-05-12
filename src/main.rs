@@ -3,7 +3,7 @@ use std::{path::PathBuf, str::FromStr, sync::Arc};
 use clap::Parser;
 use console::{pad_str, style};
 use dialoguer::{theme::ColorfulTheme, Input, Select};
-use octocrab::Octocrab;
+use octocrab::{models::pulls::PullRequest, Octocrab, Page};
 use rustygit::types::BranchName;
 
 use crate::{
@@ -300,7 +300,25 @@ impl GsContext {
         let branches = &stack.branches;
         let remote = self.repo.remote_repo_info()?;
         let pulls = self.github.pulls(remote.owner, remote.name);
-        let open_pulls = pulls.list().send().await?;
+
+        for (i, branch) in branches.iter().enumerate() {
+            let base = match i {
+                0 => &self.current_stack().unwrap().base_branch,
+                _ => &branches[i - 1],
+            };
+            let title = format!("{} (#{}) - {}", stack.prefix.clone().unwrap(), i, branch);
+            pulls
+                .create(title, branch, base)
+                .body("Created by [g-stack](https://github.com/Bendzae/g-stack).")
+                .send()
+                .await?;
+        }
+
+        Ok(())
+    }
+
+    async fn list_pull_requests(&self) -> Result<()> {
+        let open_pulls = self.get_pull_requests().await?;
         println!(
             "{:?}",
             open_pulls
@@ -309,8 +327,18 @@ impl GsContext {
                 .map(|pr| pr.title.clone().unwrap())
                 .collect::<Vec<String>>()
         );
-
         Ok(())
+    }
+
+    async fn get_pull_requests(&self) -> Result<Page<PullRequest>> {
+        let remote = self.repo.remote_repo_info()?;
+        let pulls = self.github.pulls(remote.owner, remote.name);
+        let open_pulls = pulls
+            .list()
+            .state(octocrab::params::State::Open)
+            .send()
+            .await?;
+        Ok(open_pulls)
     }
 
     fn reset(&mut self) -> Result<()> {
