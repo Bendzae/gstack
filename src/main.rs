@@ -52,7 +52,10 @@ async fn main() -> Result<()> {
         Some(Commands::Up {}) => ctx.checkout_above()?,
         Some(Commands::Down {}) => ctx.checkout_below()?,
         Some(Commands::Base {}) => ctx.checkout_base()?,
-        Some(Commands::Pr {}) => ctx.create_pull_requests().await?,
+        Some(Commands::Pr { cmd }) => match cmd {
+            command::PrCommands::New {} => ctx.create_pull_requests().await?,
+            command::PrCommands::List {} => ctx.list_pull_requests().await?,
+        },
         Some(Commands::Reset {}) => ctx.reset()?,
         None => {}
     }

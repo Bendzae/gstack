@@ -40,6 +40,16 @@ pub enum Commands {
     Base {},
     Up {},
     Down {},
-    Pr {},
+    Pr {
+        #[clap(subcommand)]
+        cmd: PrCommands,
+    },
     Reset {},
+}
+
+#[derive(Subcommand)]
+pub enum PrCommands {
+    New {},
+    #[clap(alias = "ls")]
+    List {},
 }
