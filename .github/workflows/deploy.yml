@@ -52,7 +52,7 @@ jobs:
         shell: bash
         run: |
           # Replace with the name of your binary
-          binary_name="g-stack"
+          binary_name="gstack"
 
           dirname="$binary_name-${{ env.VERSION }}-${{ matrix.target }}"
           mkdir "$dirname"
