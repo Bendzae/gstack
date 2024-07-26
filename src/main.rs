@@ -57,7 +57,11 @@ async fn main() -> Result<()> {
             command::PrCommands::List {} => ctx.list_pull_requests().await?,
         },
         Some(Commands::Reset {}) => ctx.reset()?,
-        None => {}
+        None => println!(
+            "Welcome to {}! Run {} to see available commands.",
+            style("G-Stack").bold().cyan(),
+            style("gs help").italic().green(),
+        ),
     }
 
     Ok(())
