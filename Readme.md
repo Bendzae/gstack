@@ -5,6 +5,10 @@
 
 G-stack is a CLI util to simplify creating stacked branches and pull requests on github.
 
+## Installation
+
+`brew tap bendzae/gstack` and then `brew install gstack`
+
 ## Configuration
 
 To be able to create and modify github prs a personal access token is needed.
