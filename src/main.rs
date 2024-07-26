@@ -318,7 +318,7 @@ impl GsContext {
             println!("base: {}, title: {}", base, title);
             pulls
                 .create(title, branch, base)
-                .body("Created by [g-stack](https://github.com/Bendzae/g-stack)")
+                .body("Created by [gstack](https://github.com/Bendzae/gstack)")
                 .send()
                 .await?;
         }

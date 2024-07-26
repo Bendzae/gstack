@@ -15,7 +15,7 @@ impl GlobalConfig {
             let config: GlobalConfig = toml::from_str(file_content.as_str())?;
             Ok(config)
         } else {
-            bail!("Could not find g-stack config at default location $HOME/.gstack/config.toml")
+            bail!("Could not find gstack config at default location $HOME/.gstack/config.toml")
         }
     }
 }
