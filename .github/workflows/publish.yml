@@ -41,7 +41,7 @@ jobs:
 
           # Custom install command for your formula.
           # Required - string
-          install: 'bin.install "g-stack" => "gs"'
+          install: 'bin.install "gstack" => "gs"'
 
           # Custom test command for your formula so you can run `brew test`.
           # Optional - string
