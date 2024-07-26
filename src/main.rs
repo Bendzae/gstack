@@ -313,7 +313,9 @@ impl GsContext {
                 0 => &self.current_stack().unwrap().base_branch,
                 _ => &branches[i - 1],
             };
-            let title = format!("{} (#{}) - {}", stack.prefix.clone().unwrap(), i, branch);
+            let title = format!("{} (#{}) - {}", stack.prefix.clone().unwrap(), i, branch.split('/').last().unwrap());
+
+            println!("base: {}, title: {}", base, title);
             pulls
                 .create(title, branch, base)
                 .body("Created by [g-stack](https://github.com/Bendzae/g-stack)")
