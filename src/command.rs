@@ -37,21 +37,29 @@ pub enum Commands {
     /// Change to another stack (not in stack branch) or stack branch (in stack branch)
     #[clap(alias = "c")]
     Change {},
+    /// Update, auto-rebase, and push all stack branches to make sure they are in sync
     #[clap(alias = "ss")]
     Sync {},
+    /// Switch to base branch of the stack
     Base {},
+    /// Switch to the above branch of the stack
     Up {},
+    /// Switch to the below branch of the stack
     Down {},
+    /// Commands related to github PR's
     Pr {
         #[clap(subcommand)]
         cmd: PrCommands,
     },
+    /// Delete all stacks and their branches
     Reset {},
 }
 
 #[derive(Subcommand)]
 pub enum PrCommands {
+    /// Create new PR's for all stack branches
     New {},
     #[clap(alias = "ls")]
+    /// List open PR's for all stack branches
     List {},
 }
