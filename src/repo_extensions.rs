@@ -35,7 +35,7 @@ impl RepoExtenstions for Repository {
     fn pull_all(&self, branches: &Vec<String>) -> Result<()> {
         for branch in branches {
             self.switch_branch(&BranchName::from_str(branch.as_str())?)?;
-            let output = self.cmd_out(&["pull", "--rebase"])?;
+            let output = self.cmd_out(&["pull", "--rebase"]).ok();
             println!("{:?}", output);
         }
         Ok(())
@@ -51,12 +51,13 @@ impl RepoExtenstions for Repository {
 
     fn remote_repo_info(&self) -> Result<RemoteRepoInfo> {
         let url = self.remote_repo_url()?;
-        let re = Regex::new(r"https://github.com/([^/]+)/([^/]+)\.git").unwrap();
+        let re = Regex::new(r"(https://github.com/|git@github.com:)([^/]+)/([^/]+)\.git").unwrap();
+        println!("{}", url);
 
         if let Some(captures) = re.captures(url.as_str()) {
             Ok(RemoteRepoInfo {
-                owner: captures.get(1).unwrap().as_str().to_string(),
-                name: captures.get(2).unwrap().as_str().to_string(),
+                owner: captures.get(2).unwrap().as_str().to_string(),
+                name: captures.get(3).unwrap().as_str().to_string(),
             })
         } else {
             bail!("Malformed remote url")

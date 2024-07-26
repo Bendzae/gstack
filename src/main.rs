@@ -316,7 +316,7 @@ impl GsContext {
             let title = format!("{} (#{}) - {}", stack.prefix.clone().unwrap(), i, branch);
             pulls
                 .create(title, branch, base)
-                .body("Created by [g-stack](https://github.com/Bendzae/g-stack).")
+                .body("Created by [g-stack](https://github.com/Bendzae/g-stack)")
                 .send()
                 .await?;
         }

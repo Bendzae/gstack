@@ -25,6 +25,7 @@ pub enum Commands {
         #[arg(short, long)]
         name: Option<String>,
     },
+    /// Stacks a new branch on top of the current stack
     Add {
         /// Name of this change/branch
         #[arg(short, long)]
@@ -33,6 +34,7 @@ pub enum Commands {
     /// List all stacks(not in stack branch) or branches(in stack branch)
     #[clap(alias = "ls")]
     List {},
+    /// Change to another stack (not in stack branch) or stack branch (in stack branch)
     #[clap(alias = "c")]
     Change {},
     #[clap(alias = "ss")]
