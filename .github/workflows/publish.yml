@@ -35,14 +35,13 @@ jobs:
 
           # Custom dependencies in case other formulas are needed to build the current one.
           # Optional - multiline string
-          depends_on: |
-            "rust" => :build
+          # depends_on: |
+          #   "rust" => :build
           #   "gcc"
+
           # Custom install command for your formula.
           # Required - string
-          install: |
-            system "cargo", "build", "--release", "--bin", "gstack"
-            bin.install "target/release/gstack"
+          install: bin.install "gstack" => "gs"
 
           # Custom test command for your formula so you can run `brew test`.
           # Optional - string
@@ -75,10 +74,10 @@ jobs:
           # Darwin AMD pre-existing path example: https://github.com/justintime50/myrepo/releases/download/v1.2.0/myrepo-1.2.0-darwin-amd64.tar.gz
           # Linux ARM pre-existing path example: https://github.com/justintime50/myrepo/releases/download/v1.2.0/myrepo-1.2.0-linux-arm64.tar.gz
           # Optional - booleans
-          # target_darwin_amd64: false
-          # target_darwin_arm64: true
-          # target_linux_amd64: false
-          # target_linux_arm64: false
+          target_darwin_amd64: false
+          target_darwin_arm64: true
+          target_linux_amd64: false
+          target_linux_arm64: false
 
           # Update your homebrew tap's README with a table of all projects in the tap.
           # This is done by pulling the information from all your formula.rb files - eg:
@@ -100,7 +99,7 @@ jobs:
 
           # Skips committing the generated formula to a homebrew tap (useful for local testing).
           # Default is shown - boolean
-          skip_commit: false
+          skip_commit: true
 
           # Logs debugging info to console.
           # Default is shown - boolean
