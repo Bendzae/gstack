@@ -7,7 +7,15 @@ G-stack is a CLI util to simplify creating stacked branches and pull requests on
 
 ## Installation
 
-`brew tap bendzae/gstack` and then `brew install gstack`
+```bash
+brew tap bendzae/gstack
+```
+
+and then
+
+```bash
+brew install gstack
+```
 
 ## Configuration
 
@@ -22,13 +30,13 @@ personal_access_token = "<GITHUB_PERSONAL_ACCESS_TOKEN>"
 
 ## Usage
 
-_Show available commands_
+### Show available commands
 
 ```bash
 gs help
 ```
 
-_Create a new stack_
+### Create a new stack
 
 Creates a new stack with the current branch as a base and checks out the new branch
 
@@ -36,7 +44,7 @@ Creates a new stack with the current branch as a base and checks out the new bra
 gs new
 ```
 
-_Add a new stack branch_
+### Add a new stack branch
 
 Stacks a new branch on top of the current stac
 
@@ -44,7 +52,7 @@ Stacks a new branch on top of the current stac
 gs add
 ```
 
-_Moving through stack branches_
+### Moving through stack branches
 
 Move up and down trough stack branches with:
 
