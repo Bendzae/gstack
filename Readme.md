@@ -1,3 +1,5 @@
+![build](https://github.com/Bendzae/gstack/actions/workflows/rust.yml/badge.svg)
+
 # Stacked branches and github PR's
 
 > [!CAUTION]
