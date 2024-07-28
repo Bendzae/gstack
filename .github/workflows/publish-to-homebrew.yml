@@ -1,6 +1,6 @@
 # .github/workflows/release.yml
 # Start Homebrew Releaser when a new GitHub release is created
-name: Publish
+name: Publish to homwbrew
 
 on:
   release:
@@ -77,7 +77,7 @@ jobs:
           target_darwin_amd64: true
           target_darwin_arm64: true
           target_linux_amd64: true
-          target_linux_arm64: true
+          target_linux_arm64: false
 
           # Update your homebrew tap's README with a table of all projects in the tap.
           # This is done by pulling the information from all your formula.rb files - eg:

@@ -1,4 +1,4 @@
-name: Deploy
+name: Release
 
 on:
   push:
@@ -17,13 +17,17 @@ jobs:
       matrix:
         # You can add more, for any target you'd like!
         include:
-          # - build: linux
-          #   os: ubuntu-latest
-          #   target: x86_64-unknown-linux-musl
+          - build: linux
+            os: ubuntu-latest
+            target: x86_64-unknown-linux-musl
 
           - build: macos
             os: macos-latest
             target: aarch64-apple-darwin
+
+          - build: macos
+            os: macos-latest
+            target: x86_64-apple-darwin
 
     steps:
       - name: Checkout
@@ -54,7 +58,28 @@ jobs:
           # Replace with the name of your binary
           binary_name="gstack"
 
-          dirname="$binary_name-${{ env.VERSION }}-${{ matrix.target }}"
+          # darwin-amd64
+          target_name="darwin-arm64"
+          case ${{ matrix.target }} in
+            x86_64-unknown-linux-musl)
+              target_name="linux-amd64"
+              ;;
+
+            aarch64-apple-darwin)
+              target_name="darwin-arm64"
+              ;;
+
+            x86_64-apple-darwin)
+              target_name="darwin-amd64"
+              ;;
+
+            *)
+              printf 'unknown target';
+              exit 1;
+              ;;
+          esac
+
+          dirname="$binary_name-${{ env.VERSION }}-$target_name"
           mkdir "$dirname"
           if [ "${{ matrix.os }}" = "windows-latest" ]; then
             mv "target/${{ matrix.target }}/release/$binary_name.exe" "$dirname"
