@@ -308,19 +308,37 @@ impl GsContext {
         let remote = self.repo.remote_repo_info()?;
         let pulls = self.github.pulls(remote.owner, remote.name);
 
+        let mut created_pulls = vec![];
         for (i, branch) in branches.iter().enumerate() {
             let base = match i {
                 0 => &self.current_stack().unwrap().base_branch,
                 _ => &branches[i - 1],
             };
-            let title = format!("{} (#{}) - {}", stack.prefix.clone().unwrap(), i, branch.split('/').last().unwrap());
+            let title = format!(
+                "{} (#{}) - {}",
+                stack.prefix.clone().unwrap(),
+                i,
+                branch.split('/').last().unwrap()
+            );
 
             println!("base: {}, title: {}", base, title);
-            pulls
+            let pr = pulls
                 .create(title, branch, base)
                 .body("Created by [gstack](https://github.com/Bendzae/gstack)")
                 .send()
                 .await?;
+            println!("#{}: {}", pr.number, pr.html_url.clone().unwrap());
+            created_pulls.push(pr);
+        }
+
+        for pr in &created_pulls {
+            let mut body = "".to_string();
+            created_pulls
+                .iter()
+                .for_each(|p| body = body.clone() + format!("#{} \n", p.number).as_str());
+            body = body.clone() + "\nCreated by [gstack](https://github.com/Bendzae/gstack)";
+
+            pulls.update(pr.number).body(body).send().await?;
         }
 
         Ok(())
