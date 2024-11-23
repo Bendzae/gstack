@@ -3,7 +3,9 @@ use std::{path::PathBuf, str::FromStr, sync::Arc};
 use clap::Parser;
 use console::{pad_str, style};
 use dialoguer::{theme::ColorfulTheme, Input, Select};
-use octocrab::{models::pulls::PullRequest, Octocrab, Page};
+use octocrab::{
+    models::pulls::PullRequest, params::pulls::Sort, pulls::PullRequestHandler, Octocrab, Page,
+};
 use rustygit::types::BranchName;
 
 use crate::{
@@ -48,7 +50,7 @@ async fn main() -> Result<()> {
         Some(Commands::Add { name }) => ctx.add_to_stack(name)?,
         Some(Commands::List {}) => ctx.list()?,
         Some(Commands::Change {}) => ctx.change()?,
-        Some(Commands::Sync {}) => ctx.sync()?,
+        Some(Commands::Sync {}) => ctx.sync().await?,
         Some(Commands::Up {}) => ctx.checkout_above()?,
         Some(Commands::Down {}) => ctx.checkout_below()?,
         Some(Commands::Base {}) => ctx.checkout_base()?,
@@ -59,7 +61,7 @@ async fn main() -> Result<()> {
         Some(Commands::Reset {}) => ctx.reset()?,
         None => println!(
             "Welcome to {}! Run {} to see available commands.",
-            style("G-Stack").bold().cyan(),
+            style("G-Stack v0.0.3").bold().cyan(),
             style("gs help").italic().green(),
         ),
     }
@@ -282,7 +284,7 @@ impl GsContext {
         Ok(())
     }
 
-    fn sync(&self) -> Result<()> {
+    async fn sync(&self) -> Result<()> {
         let current_branch = self.repo.current_branch()?;
         let branches = &self.current_stack().unwrap().branches;
         self.repo.pull_all(branches).ok();
@@ -296,8 +298,13 @@ impl GsContext {
                 BranchName::from_str(rebase_on)?,
             )?;
             self.repo
-                .push_to_upstream("origin", &BranchName::from_str(branch)?)?;
+                .force_push_to_upstream("origin", &BranchName::from_str(branch)?)?;
         }
+        let open_pulls = self.get_pull_requests().await?;
+        let remote = self.repo.remote_repo_info()?;
+        let pulls = self.github.pulls(remote.owner, remote.name);
+        self.update_pr_descriptions(&pulls, open_pulls).await?;
+
         self.repo.switch_branch(&current_branch)?;
         Ok(())
     }
@@ -322,25 +329,43 @@ impl GsContext {
             );
 
             println!("base: {}, title: {}", base, title);
-            let pr = pulls
-                .create(title, branch, base)
-                .body("Created by [gstack](https://github.com/Bendzae/gstack)")
-                .send()
-                .await?;
+            let pr = pulls.create(title, branch, base).body("---").send().await?;
             println!("#{}: {}", pr.number, pr.html_url.clone().unwrap());
             created_pulls.push(pr);
         }
 
-        for pr in &created_pulls {
-            let mut body = "".to_string();
-            created_pulls
-                .iter()
-                .for_each(|p| body = body.clone() + format!("#{} \n", p.number).as_str());
-            body = body.clone() + "\nCreated by [gstack](https://github.com/Bendzae/gstack)";
+        self.update_pr_descriptions(&pulls, created_pulls).await?;
+        Ok(())
+    }
 
+    async fn update_pr_descriptions(
+        &self,
+        pulls: &PullRequestHandler<'_>,
+        prs: Vec<PullRequest>,
+    ) -> Result<()> {
+        for pr in &prs {
+            let mut body = pr
+                .body
+                .clone()
+                .unwrap_or("".to_string())
+                .lines()
+                .take_while(|line| !line.contains("---"))
+                .collect::<Vec<&str>>()
+                .join("\n");
+
+            body.push_str("\n---\n");
+            prs.iter().for_each(|p| {
+                body.push_str(format!("- #{}", p.number).as_str());
+                if pr.number == p.number {
+                    body.push_str(" (This PR)");
+                }
+                body.push('\n');
+            });
+            body = body.clone() + "\n**Created by [gstack](https://github.com/Bendzae/gstack)**";
+
+            // println!("Updating: {:?}", body);
             pulls.update(pr.number).body(body).send().await?;
         }
-
         Ok(())
     }
 
@@ -349,7 +374,6 @@ impl GsContext {
         println!(
             "{:?}",
             open_pulls
-                .items
                 .iter()
                 .map(|pr| pr.title.clone().unwrap())
                 .collect::<Vec<String>>()
@@ -357,15 +381,28 @@ impl GsContext {
         Ok(())
     }
 
-    async fn get_pull_requests(&self) -> Result<Page<PullRequest>> {
+    async fn get_pull_requests(&self) -> Result<Vec<PullRequest>> {
         let remote = self.repo.remote_repo_info()?;
         let pulls = self.github.pulls(remote.owner, remote.name);
         let open_pulls = pulls
             .list()
             .state(octocrab::params::State::Open)
+            .sort(Sort::Created)
             .send()
             .await?;
-        Ok(open_pulls)
+        let stack = &self.current_stack().unwrap();
+        let branches = &stack.branches;
+        let stack_pulls = branches
+            .iter()
+            .filter_map(|branch| {
+                open_pulls
+                    .items
+                    .iter()
+                    .find(|&pr| pr.head.sha == self.repo.head_sha(branch).unwrap_or("".to_string()))
+            })
+            .cloned()
+            .collect::<Vec<PullRequest>>();
+        Ok(stack_pulls)
     }
 
     fn reset(&mut self) -> Result<()> {

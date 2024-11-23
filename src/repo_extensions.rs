@@ -1,6 +1,7 @@
 use anyhow::Result;
 use anyhow::{bail, Ok};
 use regex::Regex;
+use std::fmt::Debug;
 use std::{ops::Rem, str::FromStr};
 
 use rustygit::{types::BranchName, Repository};
@@ -16,6 +17,8 @@ pub trait RepoExtenstions {
     fn pull_all(&self, branches: &Vec<String>) -> Result<()>;
     fn remote_repo_url(&self) -> Result<String>;
     fn remote_repo_info(&self) -> Result<RemoteRepoInfo>;
+    fn force_push_to_upstream(&self, upstream: &str, upstream_branch: &BranchName) -> Result<()>;
+    fn head_sha(&self, branch_name: &String) -> Result<String>; 
 }
 
 impl RepoExtenstions for Repository {
@@ -27,7 +30,6 @@ impl RepoExtenstions for Repository {
     fn rebase(&self, branch: BranchName, on: BranchName) -> Result<()> {
         self.switch_branch(&branch)?;
         let output = self.cmd_out(&["rebase", "--update-refs", on.to_string().as_str()])?;
-        println!("{:?}", output);
         println!("{:?}", output);
         Ok(())
     }
@@ -62,5 +64,22 @@ impl RepoExtenstions for Repository {
         } else {
             bail!("Malformed remote url")
         }
+    }
+
+    ///Force push the curent branch to its associated remote, specifying the upstream branch
+    fn force_push_to_upstream(&self, upstream: &str, upstream_branch: &BranchName) -> Result<()> {
+        self.cmd_out(&[
+            "push",
+            "-u",
+            upstream,
+            upstream_branch.to_string().as_str(),
+            "--force",
+        ]);
+        Ok(())
+    }
+
+    fn head_sha(&self, branch_name: &String) -> Result<String> {
+        let output = self.cmd_out(&["rev-parse", branch_name])?;
+        Ok(output.first().unwrap().clone())
     }
 }
