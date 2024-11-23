@@ -1,8 +1,9 @@
-use std::{path::PathBuf, str::FromStr, sync::Arc};
+use std::{path::PathBuf, str::FromStr, sync::Arc, time::Duration};
 
 use clap::Parser;
 use console::{pad_str, style};
 use dialoguer::{theme::ColorfulTheme, Input, Select};
+use indicatif::{ProgressBar, ProgressStyle};
 use octocrab::{
     models::pulls::PullRequest, params::pulls::Sort, pulls::PullRequestHandler, Octocrab, Page,
 };
@@ -306,8 +307,8 @@ impl GsContext {
         let remote = self.repo.remote_repo_info()?;
         let pulls = self.github.pulls(remote.owner, remote.name);
         self.update_pr_descriptions(&pulls, open_pulls).await?;
-
         self.repo.switch_branch(&current_branch)?;
+
         Ok(())
     }
 
@@ -365,8 +366,8 @@ impl GsContext {
             });
             body = body.clone() + "\n**Created by [gstack](https://github.com/Bendzae/gstack)**";
 
-            // println!("Updating: {:?}", body);
             pulls.update(pr.number).body(body).send().await?;
+            println!("Updated description for PR: #{}", pr.number);
         }
         Ok(())
     }
