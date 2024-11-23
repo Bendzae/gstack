@@ -346,7 +346,7 @@ impl GsContext {
         pulls: &PullRequestHandler<'_>,
         prs: Vec<PullRequest>,
     ) -> Result<()> {
-        for pr in &prs {
+        for pr in prs.iter() {
             let mut body = pr
                 .body
                 .clone()
@@ -357,7 +357,7 @@ impl GsContext {
                 .join("\n");
 
             body.push_str("\n---\n");
-            prs.iter().for_each(|p| {
+            prs.iter().rev().for_each(|p| {
                 body.push_str(format!("- #{}", p.number).as_str());
                 if pr.number == p.number {
                     body.push_str(" (This PR)");
