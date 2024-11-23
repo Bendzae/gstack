@@ -1,5 +1,6 @@
 use anyhow::Result;
 use anyhow::{bail, Ok};
+use console::style;
 use regex::Regex;
 use std::fmt::Debug;
 use std::{ops::Rem, str::FromStr};
@@ -18,7 +19,7 @@ pub trait RepoExtenstions {
     fn remote_repo_url(&self) -> Result<String>;
     fn remote_repo_info(&self) -> Result<RemoteRepoInfo>;
     fn force_push_to_upstream(&self, upstream: &str, upstream_branch: &BranchName) -> Result<()>;
-    fn head_sha(&self, branch_name: &String) -> Result<String>; 
+    fn head_sha(&self, branch_name: &String) -> Result<String>;
 }
 
 impl RepoExtenstions for Repository {
@@ -30,15 +31,24 @@ impl RepoExtenstions for Repository {
     fn rebase(&self, branch: BranchName, on: BranchName) -> Result<()> {
         self.switch_branch(&branch)?;
         let output = self.cmd_out(&["rebase", "--update-refs", on.to_string().as_str()])?;
-        println!("{:?}", output);
+        println!(
+            "Rebased branch {} on {} with output: {:?}",
+            style(branch).green(),
+            style(on).green(),
+            style(output.join(",")).white().on_black()
+        );
         Ok(())
     }
 
     fn pull_all(&self, branches: &Vec<String>) -> Result<()> {
         for branch in branches {
             self.switch_branch(&BranchName::from_str(branch.as_str())?)?;
-            let output = self.cmd_out(&["pull", "--rebase"]).ok();
-            println!("{:?}", output);
+            let output = self.cmd_out(&["pull", "--rebase"])?;
+            println!(
+                "Pulled branch {} with output: {:?}",
+                style(branch).green(),
+                style(output.join(",")).white().on_black()
+            );
         }
         Ok(())
     }
@@ -54,7 +64,6 @@ impl RepoExtenstions for Repository {
     fn remote_repo_info(&self) -> Result<RemoteRepoInfo> {
         let url = self.remote_repo_url()?;
         let re = Regex::new(r"(https://github.com/|git@github.com:)([^/]+)/([^/]+)\.git").unwrap();
-        println!("{}", url);
 
         if let Some(captures) = re.captures(url.as_str()) {
             Ok(RemoteRepoInfo {
@@ -68,13 +77,18 @@ impl RepoExtenstions for Repository {
 
     ///Force push the curent branch to its associated remote, specifying the upstream branch
     fn force_push_to_upstream(&self, upstream: &str, upstream_branch: &BranchName) -> Result<()> {
-        self.cmd_out(&[
+        let output = self.cmd_out(&[
             "push",
             "-u",
             upstream,
             upstream_branch.to_string().as_str(),
             "--force",
-        ]);
+        ])?;
+        println!(
+            "Force pushed to upstream branch {} with output: {:?}",
+            style(upstream_branch).green(),
+            style(output.join(",")).white().on_black()
+        );
         Ok(())
     }
 

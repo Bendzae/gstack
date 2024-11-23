@@ -27,6 +27,7 @@ struct GsContext {
     github: Arc<Octocrab>,
     state: GsState,
 }
+const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -60,8 +61,9 @@ async fn main() -> Result<()> {
         },
         Some(Commands::Reset {}) => ctx.reset()?,
         None => println!(
-            "Welcome to {}! Run {} to see available commands.",
-            style("G-Stack v0.0.3").bold().cyan(),
+            "Welcome to {} version {}! Run {} to see available commands.",
+            style("G-Stack").bold().cyan(),
+            style(VERSION).bold().yellow(),
             style("gs help").italic().green(),
         ),
     }
@@ -371,13 +373,9 @@ impl GsContext {
 
     async fn list_pull_requests(&self) -> Result<()> {
         let open_pulls = self.get_pull_requests().await?;
-        println!(
-            "{:?}",
-            open_pulls
-                .iter()
-                .map(|pr| pr.title.clone().unwrap())
-                .collect::<Vec<String>>()
-        );
+        for pr in open_pulls.iter() {
+            println!("#{}: {} ", pr.number, pr.html_url.clone().unwrap());
+        }
         Ok(())
     }
 
