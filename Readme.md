@@ -54,6 +54,16 @@ Stacks a new branch on top of the current stac
 gs add
 ```
 
+### Rebase branches
+
+Pulls, rebases and pushed all stack branches and updates PR descriptions
+
+```bash
+gs sync
+# or
+gs ss
+```
+
 ### Moving through stack branches
 
 Move up and down trough stack branches with:
