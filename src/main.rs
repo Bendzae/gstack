@@ -1,5 +1,5 @@
 use core::panic;
-use std::{path::PathBuf, str::FromStr, sync::Arc, thread::current};
+use std::{path::PathBuf, str::FromStr, sync::Arc, thread::current, time::Duration};
 
 use clap::Parser;
 use console::{pad_str, style};
@@ -11,6 +11,7 @@ use octocrab::{
     Octocrab,
 };
 use rustygit::types::BranchName;
+use tokio::time::sleep;
 
 use crate::{
     command::{Cli, Commands},
@@ -320,6 +321,7 @@ impl GsContext {
     }
 
     async fn create_pull_requests(&self) -> Result<()> {
+        self.sync(false).await?;
         let stack = &self.current_stack().unwrap();
         let branches = &stack.branches;
         let remote = self.repo.remote_repo_info()?;
@@ -356,7 +358,11 @@ impl GsContext {
                 .body("---")
                 .send()
                 .await?;
-            println!("#{}: {}", pr.number, pr.html_url.clone().unwrap());
+            println!(
+                "#{}: {}",
+                pr.number,
+                style(pr.html_url.clone().unwrap()).blue()
+            );
             created_pulls.push(pr);
         }
 
@@ -444,30 +450,36 @@ impl GsContext {
         let github = self.github.clone();
         let pulls = github.pulls(remote.owner, remote.name);
         let open_pulls = self.get_pull_requests().await?;
+        let base = self.current_stack().unwrap().base_branch.clone();
 
-        let merge_method = Select::with_theme(&ColorfulTheme::default())
-            .with_prompt("Merge method")
-            .default(0)
-            .items(&["Squash", "Merge", "Rebase"])
-            .interact()
-            .unwrap();
-
-        let merge_method = match merge_method {
-            0 => MergeMethod::Squash,
-            1 => MergeMethod::Merge,
-            2 => MergeMethod::Rebase,
-            _ => panic!("Unknown merge method"),
-        };
+        // TODO: fix for Squash and Rebase
+        // let merge_method = Select::with_theme(&ColorfulTheme::default())
+        //     .with_prompt("Merge method")
+        //     .default(0)
+        //     .items(&["Squash", "Merge", "Rebase"])
+        //     .interact()
+        //     .unwrap();
+        //
+        // let merge_method = match merge_method {
+        //     0 => MergeMethod::Squash,
+        //     1 => MergeMethod::Merge,
+        //     2 => MergeMethod::Rebase,
+        //     _ => panic!("Unknown merge method"),
+        // };
+        let merge_method = MergeMethod::Merge;
 
         let mut orginal_branches = vec![];
         for pr in &open_pulls {
+            pulls.update(pr.number).base(base.clone()).send().await?;
+            self.sync(false).await?;
             println!("Merging PR #{}...", pr.number);
             let branch = self.get_pr_branch(pr);
             pulls.merge(pr.number).method(merge_method).send().await?;
+            // Not the best way to do this should try to listen to the completed merge somehow
+            sleep(Duration::from_secs(3)).await;
             if let Some(branch) = branch {
                 orginal_branches.push(branch.clone());
                 self.remove_branch_from_stack(&branch)?;
-                self.sync(false).await?;
             }
         }
 
@@ -488,6 +500,7 @@ impl GsContext {
     }
 
     fn remove_branch_from_stack(&mut self, branch: &String) -> Result<()> {
+        println!("Removing branch: {}", branch);
         if !self.current_stack().unwrap().branches.contains(branch) {
             println!("Unknown stack branch, not removing");
             return Ok(());
@@ -525,7 +538,9 @@ impl GsContext {
 
         if self.state.stacks[stack_idx].branches.is_empty() {
             self.state.stacks.remove(stack_idx);
+            self.state.write(self.base_path.clone())?;
         }
+        println!("Removed branch {}", branch);
         Ok(())
     }
 

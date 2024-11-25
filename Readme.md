@@ -3,7 +3,7 @@
 # Stacked branches and github PR's
 
 > [!CAUTION]
-> Heavy work in progress
+> Work in progress
 
 G-stack is a CLI util to simplify creating stacked branches and pull requests on github.
 
@@ -69,4 +69,18 @@ or interactively select a stack branch with
 gs change
 #or
 gs c
+```
+
+### Working with github pull requests
+
+Create github pr's for all stack branches that don't have a pr yet:
+
+```bash
+gs pr new
+```
+
+Merge all stack pr's in sequence to the stacks base branch (takes care of rebases in between merges):
+
+```bash
+gs pr merge
 ```

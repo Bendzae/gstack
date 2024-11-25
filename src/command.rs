@@ -64,5 +64,6 @@ pub enum PrCommands {
     #[clap(alias = "ls")]
     /// List open PR's for all stack branches
     List {},
+    /// Merge all stack pr's in sequence to the stacks base branch
     Merge {},
 }
