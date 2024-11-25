@@ -31,6 +31,8 @@ pub enum Commands {
         #[arg(short, long)]
         name: Option<String>,
     },
+    /// Removes the currently checked out branch from the stack
+    Remove {},
     /// List all stacks(not in stack branch) or branches(in stack branch)
     #[clap(alias = "ls")]
     List {},
@@ -62,4 +64,5 @@ pub enum PrCommands {
     #[clap(alias = "ls")]
     /// List open PR's for all stack branches
     List {},
+    Merge {},
 }

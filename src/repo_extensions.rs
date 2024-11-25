@@ -82,7 +82,7 @@ impl RepoExtenstions for Repository {
             "-u",
             upstream,
             upstream_branch.to_string().as_str(),
-            "--force",
+            "--force-with-lease",
         ])?;
         println!(
             "Force pushed to upstream branch {} with output: {:?}",

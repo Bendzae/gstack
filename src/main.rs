@@ -1,11 +1,14 @@
-use std::{path::PathBuf, str::FromStr, sync::Arc, time::Duration};
+use core::panic;
+use std::{path::PathBuf, str::FromStr, sync::Arc, thread::current};
 
 use clap::Parser;
 use console::{pad_str, style};
-use dialoguer::{theme::ColorfulTheme, Input, Select};
-use indicatif::{ProgressBar, ProgressStyle};
+use dialoguer::{theme::ColorfulTheme, Confirm, Input, Select};
 use octocrab::{
-    models::pulls::PullRequest, params::pulls::Sort, pulls::PullRequestHandler, Octocrab, Page,
+    models::pulls::PullRequest,
+    params::pulls::{MergeMethod, Sort},
+    pulls::PullRequestHandler,
+    Octocrab,
 };
 use rustygit::types::BranchName;
 
@@ -50,15 +53,17 @@ async fn main() -> Result<()> {
     match &cli.command {
         Some(Commands::New { prefix, name }) => ctx.new_stack(prefix, name)?,
         Some(Commands::Add { name }) => ctx.add_to_stack(name)?,
+        Some(Commands::Remove {}) => ctx.remove_current_branch().await?,
         Some(Commands::List {}) => ctx.list()?,
         Some(Commands::Change {}) => ctx.change()?,
-        Some(Commands::Sync {}) => ctx.sync().await?,
+        Some(Commands::Sync {}) => ctx.sync(true).await?,
         Some(Commands::Up {}) => ctx.checkout_above()?,
         Some(Commands::Down {}) => ctx.checkout_below()?,
         Some(Commands::Base {}) => ctx.checkout_base()?,
         Some(Commands::Pr { cmd }) => match cmd {
             command::PrCommands::New {} => ctx.create_pull_requests().await?,
             command::PrCommands::List {} => ctx.list_pull_requests().await?,
+            command::PrCommands::Merge {} => ctx.merge_pull_requests().await?,
         },
         Some(Commands::Reset {}) => ctx.reset()?,
         None => println!(
@@ -287,7 +292,7 @@ impl GsContext {
         Ok(())
     }
 
-    async fn sync(&self) -> Result<()> {
+    async fn sync(&self, update_descriptions: bool) -> Result<()> {
         let current_branch = self.repo.current_branch()?;
         let branches = &self.current_stack().unwrap().branches;
         self.repo.pull_all(branches).ok();
@@ -306,7 +311,9 @@ impl GsContext {
         let open_pulls = self.get_pull_requests().await?;
         let remote = self.repo.remote_repo_info()?;
         let pulls = self.github.pulls(remote.owner, remote.name);
-        self.update_pr_descriptions(&pulls, open_pulls).await?;
+        if update_descriptions {
+            self.update_pr_descriptions(&pulls, open_pulls).await?;
+        }
         self.repo.switch_branch(&current_branch)?;
 
         Ok(())
@@ -317,13 +324,24 @@ impl GsContext {
         let branches = &stack.branches;
         let remote = self.repo.remote_repo_info()?;
         let pulls = self.github.pulls(remote.owner, remote.name);
+        let open_pulls = self.get_pull_requests().await?;
+
+        let draft = Confirm::new()
+            .with_prompt("Create as draft?")
+            .interact()
+            .unwrap();
 
         let mut created_pulls = vec![];
         for (i, branch) in branches.iter().enumerate() {
+            if let Some(pr) = self.get_branch_pr(&open_pulls, branch) {
+                created_pulls.push(pr);
+                continue;
+            }
             let base = match i {
                 0 => &self.current_stack().unwrap().base_branch,
                 _ => &branches[i - 1],
             };
+
             let title = format!(
                 "{} (#{}) - {}",
                 stack.prefix.clone().unwrap(),
@@ -332,7 +350,12 @@ impl GsContext {
             );
 
             println!("base: {}, title: {}", base, title);
-            let pr = pulls.create(title, branch, base).body("---").send().await?;
+            let pr = pulls
+                .create(title, branch, base)
+                .draft(draft)
+                .body("---")
+                .send()
+                .await?;
             println!("#{}: {}", pr.number, pr.html_url.clone().unwrap());
             created_pulls.push(pr);
         }
@@ -388,20 +411,140 @@ impl GsContext {
             .state(octocrab::params::State::Open)
             .sort(Sort::Created)
             .send()
-            .await?;
+            .await?
+            .items;
         let stack = &self.current_stack().unwrap();
         let branches = &stack.branches;
         let stack_pulls = branches
             .iter()
-            .filter_map(|branch| {
-                open_pulls
-                    .items
-                    .iter()
-                    .find(|&pr| pr.head.sha == self.repo.head_sha(branch).unwrap_or("".to_string()))
-            })
-            .cloned()
+            .filter_map(|branch| self.get_branch_pr(&open_pulls, branch))
             .collect::<Vec<PullRequest>>();
         Ok(stack_pulls)
+    }
+
+    fn get_branch_pr(&self, pull_requests: &[PullRequest], branch: &String) -> Option<PullRequest> {
+        pull_requests
+            .iter()
+            .find(|pr| pr.head.sha == self.repo.head_sha(branch).unwrap_or("".to_string()))
+            .cloned()
+    }
+
+    fn get_pr_branch(&self, pull_request: &PullRequest) -> Option<String> {
+        self.current_stack()?
+            .branches
+            .iter()
+            .find(|branch| {
+                pull_request.head.sha == self.repo.head_sha(branch).unwrap_or("".to_string())
+            })
+            .cloned()
+    }
+
+    async fn merge_pull_requests(&mut self) -> Result<()> {
+        let remote = self.repo.remote_repo_info()?;
+        let github = self.github.clone();
+        let pulls = github.pulls(remote.owner, remote.name);
+        let open_pulls = self.get_pull_requests().await?;
+
+        let merge_method = Select::with_theme(&ColorfulTheme::default())
+            .with_prompt("Merge method")
+            .default(0)
+            .items(&["Squash", "Merge", "Rebase"])
+            .interact()
+            .unwrap();
+
+        let merge_method = match merge_method {
+            0 => MergeMethod::Squash,
+            1 => MergeMethod::Merge,
+            2 => MergeMethod::Rebase,
+            _ => panic!("Unknown merge method"),
+        };
+
+        let mut orginal_branches = vec![];
+        for pr in &open_pulls {
+            println!("Merging PR #{}...", pr.number);
+            let branch = self.get_pr_branch(pr);
+            pulls.merge(pr.number).method(merge_method).send().await?;
+            if let Some(branch) = branch {
+                orginal_branches.push(branch.clone());
+                self.remove_branch_from_stack(&branch)?;
+                self.sync(false).await?;
+            }
+        }
+
+        println!("Sucessfully merged stack!");
+
+        let delete_branches = Confirm::new()
+            .with_prompt("Delete local branches?")
+            .interact()
+            .unwrap();
+
+        if delete_branches {
+            for branch in &orginal_branches {
+                self.repo.cmd(&["branch", "-d", branch.as_str()])?;
+                println!("Deleted branch {}", branch);
+            }
+        }
+        Ok(())
+    }
+
+    fn remove_branch_from_stack(&mut self, branch: &String) -> Result<()> {
+        if !self.current_stack().unwrap().branches.contains(branch) {
+            println!("Unknown stack branch, not removing");
+            return Ok(());
+        }
+
+        let current_branch = self.repo.current_branch()?.to_string().clone();
+        let Some(stack_idx) = self
+            .state
+            .stacks
+            .iter_mut()
+            .position(|stack| stack.branches.contains(&branch.to_string()))
+        else {
+            println!("Branch not found, not removing");
+            return Ok(());
+        };
+
+        let branch_idx = self.state.stacks[stack_idx]
+            .branches
+            .iter()
+            .position(|b| b == branch)
+            .unwrap();
+        self.state.stacks[stack_idx].branches.remove(branch_idx);
+
+        self.state.write(self.base_path.clone())?;
+        // Checkout another stack branch or base if the current branch was deleted
+        if &current_branch == branch {
+            let base = self.state.stacks[stack_idx].base_branch.clone();
+            self.repo.switch_branch(&BranchName::from_str(
+                self.state.stacks[stack_idx]
+                    .branches
+                    .first()
+                    .unwrap_or(&base),
+            )?)?;
+        }
+
+        if self.state.stacks[stack_idx].branches.is_empty() {
+            self.state.stacks.remove(stack_idx);
+        }
+        Ok(())
+    }
+
+    async fn remove_current_branch(&mut self) -> Result<()> {
+        let current = self.repo.current_branch()?;
+        self.remove_branch_from_stack(&current.to_string())?;
+        let delete_branch = Confirm::new()
+            .with_prompt("Delete local branch?")
+            .interact()
+            .unwrap();
+
+        if delete_branch {
+            self.repo
+                .cmd(&["branch", "-d", current.to_string().as_str()])?;
+            println!("Deleted branch {}", current.to_string());
+        }
+
+        self.sync(true).await?;
+        Ok(())
     }
 
     fn reset(&mut self) -> Result<()> {
