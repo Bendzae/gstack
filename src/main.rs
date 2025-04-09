@@ -1,4 +1,3 @@
-use core::panic;
 use std::{path::PathBuf, str::FromStr, sync::Arc, thread::current, time::Duration};
 
 use clap::Parser;
@@ -429,9 +428,29 @@ impl GsContext {
     }
 
     fn get_branch_pr(&self, pull_requests: &[PullRequest], branch: &String) -> Option<PullRequest> {
-        pull_requests
+        // First, check for exact SHA match (current implementation)
+        let exact_match = pull_requests
             .iter()
             .find(|pr| pr.head.sha == self.repo.head_sha(branch).unwrap_or("".to_string()))
+            .cloned();
+        
+        if exact_match.is_some() {
+            return exact_match;
+        }
+        
+        // If no exact match, check if the PR's head reference matches our branch name
+        // This handles cases where the local branch is ahead of the remote
+        let branch_name = branch.split('/').next_back().unwrap_or(branch);
+    
+       pull_requests
+            .iter()
+            .find(|pr| {
+                // Check if PR head ref matches our branch (ignoring repo prefix)
+                pr.head.ref_field.ends_with(branch_name) &&
+                // Verify branch name format to avoid false matches
+                (pr.head.ref_field == *branch || 
+                pr.head.ref_field.ends_with(&format!("/{}", branch_name)))
+            })
             .cloned()
     }
 
