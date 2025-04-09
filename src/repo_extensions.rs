@@ -1,9 +1,8 @@
+use anyhow::bail;
 use anyhow::Result;
-use anyhow::{bail, Ok};
 use console::style;
 use regex::Regex;
-use std::fmt::Debug;
-use std::{ops::Rem, str::FromStr};
+use std::str::FromStr;
 
 use rustygit::{types::BranchName, Repository};
 
@@ -75,20 +74,68 @@ impl RepoExtenstions for Repository {
         }
     }
 
-    ///Force push the curent branch to its associated remote, specifying the upstream branch
+    ///Force push the current branch to its associated remote, specifying the upstream branch,
+    ///but only if there are changes to push
     fn force_push_to_upstream(&self, upstream: &str, upstream_branch: &BranchName) -> Result<()> {
-        let output = self.cmd_out(&[
-            "push",
-            "-u",
-            upstream,
-            upstream_branch.to_string().as_str(),
-            "--force-with-lease",
-        ])?;
-        println!(
-            "Force pushed to upstream branch {} with output: {:?}",
-            style(upstream_branch).green(),
-            style(output.join(",")).white().on_black()
-        );
+        // Check if there are differences between local and remote branch
+        let remote_ref = format!("{}/{}", upstream, upstream_branch);
+
+        // Get the commit hash of the local HEAD
+        let local_commit = self.cmd_out(&["rev-parse", "HEAD"])?;
+        let local_commit = local_commit.join("").trim().to_string();
+
+        // Try to get the commit hash of the remote branch
+        let remote_commit_result = self.cmd_out(&["rev-parse", &remote_ref]);
+
+        // Determine if we need to push
+        let need_to_push = match remote_commit_result {
+            // Remote branch exists, check if it differs from local
+            Ok(remote_commit) => {
+                let remote_commit = remote_commit.join("").trim().to_string();
+
+                // Check if local and remote commits are different
+                if local_commit != remote_commit {
+                    // Check if local is ahead or has diverged from remote
+                    let base_commit = self.cmd_out(&["merge-base", "HEAD", &remote_ref])?;
+                    let base_commit = base_commit.join("").trim().to_string();
+
+                    // If different and valid ancestry, we should push
+                    true
+                } else {
+                    // Commits are identical, no need to push
+                    println!(
+                        "No changes to push for branch {}: local and remote are at the same commit",
+                        style(upstream_branch).green()
+                    );
+                    false
+                }
+            }
+            // Remote branch doesn't exist, we should push
+            Err(_) => {
+                println!(
+                    "Remote branch {} doesn't exist yet - will push",
+                    style(&remote_ref).yellow()
+                );
+                true
+            }
+        };
+
+        // Only push if needed
+        if need_to_push {
+            let output = self.cmd_out(&[
+                "push",
+                "-u",
+                upstream,
+                upstream_branch.to_string().as_str(),
+                "--force-with-lease",
+            ])?;
+            println!(
+                "Force pushed to upstream branch {} with output: {:?}",
+                style(upstream_branch).green(),
+                style(output.join(",")).white().on_black()
+            );
+        }
+
         Ok(())
     }
 
